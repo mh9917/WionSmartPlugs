@@ -1,6 +1,6 @@
 import socket
-from datetime import datetime
-import struct, time
+import struct
+import time
 from threading import Thread
 from .plug import EcoPlug
 
@@ -9,14 +9,13 @@ def normalize_string(x):
         return x.rstrip(b' \t\r\n\0')
     return x
 
-class EcoDiscovery(object):
+class EcoDiscovery:
     UDP_PORT = 8900
 
     def __init__(self, on_add, on_remove):
         self.on_add = on_add
         self.on_remove = on_remove
         self.discovered = {}
-
         self.running = False
 
     def iterate(self):
@@ -73,15 +72,12 @@ class EcoDiscovery(object):
             if broadcast:
                 last_broadcast = time.time()
 
-                now = datetime.now()
-                packet = bytearray(b'\x00' * 128)
-                struct.pack_into('<HBBL', packet, 24, now.year, now.month, now.day, now.hour * 3600 + now.minute * 60 + now.second)
-                self.socket.sendto(packet, ('255.255.255.255', 5888))
-                self.socket.sendto(packet, ('255.255.255.255', 5888))
-                self.socket.sendto(packet, ('255.255.255.255', 5888))
-                self.socket.sendto(packet, ('255.255.255.255', 25))
-                self.socket.sendto(packet, ('255.255.255.255', 25))
-                self.socket.sendto(packet, ('255.255.255.255', 25))
+                now = int(time.time())
+                packet = bytearray(b'\x00' * 64)
+                struct.pack_into('<4s4sHHI', packet, 0, b'\xFF\xFF\xFF\xFF', b'\x10\x00\x00\x00', 2, 65535, now)
+                self.socket.sendto(packet, ('255.255.255.255', self.UDP_PORT))
+                self.socket.sendto(packet, ('255.255.255.255', self.UDP_PORT))
+                self.socket.sendto(packet, ('255.255.255.255', self.UDP_PORT))
 
                 broadcast = False
 
@@ -99,23 +95,3 @@ class EcoDiscovery(object):
                     continue
                 finally:
                     self.prune_stale()
-
-
-if __name__ == '__main__':
-    def on_add(pkt):
-        print('Add:', repr(pkt))
-        pkt.turn_on()
-        print(pkt.is_on())
-    def on_remove(pkt):
-        print('Remove:', repr(pkt))
-
-    try:
-        e = EcoDiscovery(on_add, on_remove)
-        e.start()
-        time.sleep(180)
-    finally:
-        for plug in e.iterate():
-            plug.turn_off()
-        e.stop()
-
-
